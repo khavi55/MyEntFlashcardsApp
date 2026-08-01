@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ent-flashcards-v1';
+const CACHE_NAME = 'ent-flashcards-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -35,7 +35,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const requestUrl = event.request.url;
 
-  // Let Google Apps Script bypass service worker cache
+  // Let Google Apps Script requests bypass the service worker cache 
   if (requestUrl.includes('script.google.com')) {
     return;
   }
@@ -49,8 +49,8 @@ self.addEventListener('fetch', (event) => {
 
       // Otherwise, fetch from the network
       return fetch(event.request).then((networkResponse) => {
-        // If it's a valid network response, check if it's a GitHub image or core asset
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic' && !requestUrl.includes('raw.githubusercontent.com')) {
+        // Accept status 200 (standard local/same-origin) or status 0 (opaque cross-origin like GitHub raw)
+        if (!networkResponse || (networkResponse.status !== 200 && networkResponse.status !== 0)) {
           return networkResponse;
         }
 
@@ -63,8 +63,11 @@ self.addEventListener('fetch', (event) => {
 
         return networkResponse;
       }).catch(() => {
-        // Optional fallback if both cache and network fail
-        return new Response("Offline and resource not cached.");
+        // Fallback if both cache and network fail
+        return new Response("Offline and resource not cached.", {
+          status: 503,
+          statusText: "Service Unavailable"
+        });
       });
     })
   );
