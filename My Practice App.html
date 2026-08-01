@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENT Flashcards</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f9; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: left; cursor: pointer; min-height: 150px; display: flex; flex-direction: column; justify-content: center; font-size: 1.2em; margin-bottom: 20px; box-sizing: border-box; }
+        .card-label { font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px; font-weight: bold; }
+        .card-image { max-width: 100%; max-height: 250px; object-fit: contain; display: none; margin-top: 15px; border-radius: 4px; border: 1px solid #ddd; }
+        .status { font-size: 0.9em; color: #666; margin-bottom: 15px; }
+        .button-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        button { padding: 10px 20px; font-size: 1em; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #0056b3; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #5a6268; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <h1>ENT Flashcards</h1>
+    <div id="status" class="status">Checking connection...</div>
+    
+    <div id="flashcard-container" style="display:none;">
+        <div id="topic-badge" style="font-weight: bold; color: #007bff; margin-bottom: 10px;"></div>
+        
+        <div class="card" id="card" onclick="flipCard()">
+            <div id="card-label" class="card-label">Question</div>
+            <div id="card-content">Click to load session</div>
+            <img id="card-image" class="card-image" src="" alt="Flashcard Visual" />
+        </div>
+        
+        <div class="button-group">
+            <button class="secondary" onclick="startNewSessionManually()">New Session</button>
+            <button id="prev-btn" class="secondary" onclick="prevQuestion()" disabled>Previous</button>
+            <button id="next-btn" onclick="nextQuestion()">Next</button>
+        </div>
+    </div>
+
+    <script>
+        const TOPICS = ["General ENT", "Ear", "Nose", "Throat", "H&N"];
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyprb83aRZoej7cQ2gnhSef7nfk0lhOzV1CDjISGI1dbJRMzZev_5DuVewJCLer20Q/exec";
+        
+        let globalQuestions = [];
+        let sessionQuestions = [];
+        let currentIndex = 0;
+        let showingAnswer = false;
+
+        async function initApp() {
+            const statusEl = document.getElementById("status");
+            let questions = [];
+
+            try {
+                const response = await fetch(WEB_APP_URL);
+                if (!response.ok) throw new Error("Network response failed");
+                questions = await response.json();
+                
+                localStorage.setItem("ent_flashcards", JSON.stringify(questions));
+                statusEl.innerHTML = "🟢 Online: Synced with Google Sheets.";
+            } catch (error) {
+                const cachedData = localStorage.getItem("ent_flashcards");
+                if (cachedData) {
+                    questions = JSON.parse(cachedData);
+                    statusEl.innerHTML = "🟠 Offline: Using last saved version from Google Sheets.";
+                } else {
+                    statusEl.innerHTML = "🔴 Offline and no cached data available. Please connect to the internet once.";
+                    return;
+                }
+            }
+
+            globalQuestions = questions;
+            document.getElementById("flashcard-container").style.display = "block";
+            startNewSessionManually();
+        }
+
+        function startNewSessionManually() {
+            if (globalQuestions.length === 0) return;
+            sessionQuestions = [];
+            
+            TOPICS.forEach(topic => {
+                const topicQuestions = globalQuestions.filter(q => q.topic.trim().toLowerCase() === topic.toLowerCase());
+                if (topicQuestions.length > 0) {
+                    const randomQ = topicQuestions[Math.floor(Math.random() * topicQuestions.length)];
+                    sessionQuestions.push(randomQ);
+                }
+            });
+
+            sessionQuestions.sort(() => Math.random() - 0.5);
+            currentIndex = 0;
+            showCurrentQuestion();
+        }
+
+        function showCurrentQuestion() {
+            const imgEl = document.getElementById("card-image");
+
+            if (sessionQuestions.length === 0) {
+                document.getElementById("card-label").innerText = "Notice";
+                document.getElementById("card-content").innerText = "No questions found matching your 5 topics.";
+                imgEl.style.display = "none";
+                return;
+            }
+            
+            if (currentIndex >= sessionQuestions.length) {
+                document.getElementById("topic-badge").innerText = "Session Complete!";
+                document.getElementById("card-label").innerText = "Summary";
+                document.getElementById("card-content").innerText = "You've finished all 5 questions for this session. Click 'New Session' to start again!";
+                imgEl.style.display = "none";
+                document.getElementById("next-btn").disabled = true;
+                document.getElementById("prev-btn").disabled = false;
+                return;
+            }
+
+            document.getElementById("next-btn").disabled = false;
+            document.getElementById("prev-btn").disabled = (currentIndex === 0);
+
+            const currentQ = sessionQuestions[currentIndex];
+            document.getElementById("topic-badge").innerText = `Topic: ${currentQ.topic} (${currentIndex + 1}/5)`;
+            document.getElementById("card-label").innerText = "Question";
+            document.getElementById("card-content").innerText = currentQ.question;
+            
+            // Handle Image Display for Question
+            if (currentQ.imageUrl && currentQ.imageUrl.trim() !== "") {
+                imgEl.src = currentQ.imageUrl;
+                imgEl.style.display = "block";
+            } else {
+                imgEl.style.display = "none";
+            }
+
+            showingAnswer = false;
+        }
+
+        function flipCard() {
+            if (sessionQuestions.length === 0 || currentIndex >= sessionQuestions.length) return;
+            const currentQ = sessionQuestions[currentIndex];
+            const imgEl = document.getElementById("card-image");
+            
+            if (!showingAnswer) {
+                document.getElementById("card-label").innerText = "Answer";
+                document.getElementById("card-content").innerText = currentQ.answer;
+                
+                // Keep image visible on answer side (or hide if you only want it on questions)
+                if (currentQ.imageUrl && currentQ.imageUrl.trim() !== "") {
+                    imgEl.src = currentQ.imageUrl;
+                    imgEl.style.display = "block";
+                }
+                
+                showingAnswer = true;
+            } else {
+                document.getElementById("card-label").innerText = "Question";
+                document.getElementById("card-content").innerText = currentQ.question;
+                
+                if (currentQ.imageUrl && currentQ.imageUrl.trim() !== "") {
+                    imgEl.src = currentQ.imageUrl;
+                    imgEl.style.display = "block";
+                }
+                
+                showingAnswer = false;
+            }
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            showCurrentQuestion();
+        }
+
+        function prevQuestion() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                showCurrentQuestion();
+            }
+        }
+
+        window.onload = initApp;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>
