@@ -21,7 +21,6 @@
     </style>
 </head>
 <body>
-
     <h1>ENT Flashcards</h1>
     <div id="status" class="status">Checking connection...</div>
     
@@ -39,6 +38,10 @@
             <button id="prev-btn" class="secondary" onclick="prevQuestion()" disabled>Previous</button>
             <button id="next-btn" onclick="nextQuestion()">Next</button>
         </div>
+        
+        <button onclick="clearAppCache()" id="clear-cache-btn">
+        Reset & Clear Cache
+        </button>
     </div>
 
     <script>
@@ -161,21 +164,42 @@
                 showingAnswer = false;
             }
         }
-
         function nextQuestion() {
             currentIndex++;
             showCurrentQuestion();
         }
-
         function prevQuestion() {
             if (currentIndex > 0) {
                 currentIndex--;
                 showCurrentQuestion();
             }
         }
-
+        async function clearAppCache() {
+          if (confirm("Are you sure you want to clear all offline data and reset the app?")) {
+            // 1. Clear Local Storage (Questions & Answers)
+            localStorage.clear();
+        
+            // 2. Delete all Cache Storage instances
+            if ('caches' in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+        
+            // 3. Unregister Service Workers
+            if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              for (let registration of registrations) {
+                await registration.unregister();
+              }
+            }
+        
+            alert("Cache cleared successfully! The page will now reload.");
+            window.location.reload();
+          }
+        }
+        
         window.onload = initApp;
-
+        
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
